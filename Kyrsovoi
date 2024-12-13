@@ -1,0 +1,125 @@
+import tkinter as tk
+from tkinter import messagebox
+
+class CheckersGame:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Фризские шашки")
+        self.board_size = 10
+        self.cell_size = 60
+        self.canvas = tk.Canvas(master, width=self.board_size * self.cell_size, height=self.board_size * self.cell_size)
+        self.canvas.pack()
+        self.board = self.create_board()
+        self.selected_piece = None
+        self.current_player = 'white'  # 'white' or 'black'
+        self.draw_board()
+
+    def create_board(self):
+        board = [['' for _ in range(self.board_size)] for _ in range(self.board_size)]
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                if (row + col) % 2 == 1:
+                    if row < 4:
+                        board[row][col] = 'black'
+                    elif row > 5:
+                        board[row][col] = 'white'
+        return board
+
+    def draw_board(self):
+        self.canvas.delete("all")
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                color = 'white' if (row + col) % 2 == 0 else 'gray'
+                self.canvas.create_rectangle(col * self.cell_size, row * self.cell_size,
+                                             (col + 1) * self.cell_size, (row + 1) * self.cell_size,
+                                             fill=color)
+                if self.board[row][col] == 'black':
+                    self.canvas.create_oval(col * self.cell_size + 10, row * self.cell_size + 10,
+                                            (col + 1) * self.cell_size - 10, (row + 1) * self.cell_size - 10,
+                                            fill='black')
+                elif self.board[row][col] == 'white':
+                    self.canvas.create_oval(col * self.cell_size + 10, row * self.cell_size + 10,
+                                            (col + 1) * self.cell_size - 10, (row + 1) * self.cell_size - 10,
+                                            fill='white')
+                elif self.board[row][col] == 'white_king':
+                    self.canvas.create_oval(col * self.cell_size + 10, row * self.cell_size + 10,
+                                            (col + 1) * self.cell_size - 10, (row + 1) * self.cell_size - 10,
+                                            fill='white', outline='gold', width=5)
+                elif self.board[row][col] == 'black_king':
+                    self.canvas.create_oval(col * self.cell_size + 10, row * self.cell_size + 10,
+                                            (col + 1) * self.cell_size - 10, (row + 1) * self.cell_size - 10,
+                                            fill='black', outline='gold', width=5)
+
+    def click_handler(self, event):
+        col = event.x // self.cell_size
+        row = event.y // self.cell_size
+        if self.selected_piece:
+            self.move_piece(row, col)
+        else:
+            self.select_piece(row, col)
+
+    def select_piece(self, row, col):
+        piece = self.board[row][col]
+        if piece and (piece.startswith(self.current_player) or piece == self.current_player + '_king'):
+            self.selected_piece = (row, col)
+
+    def move_piece(self, row, col):
+        if self.is_valid_move(row, col):
+            old_row, old_col = self.selected_piece
+            piece = self.board[old_row][old_col]
+            if self.is_capture_move(old_row, old_col, row, col):
+                self.capture_piece(old_row, old_col, row, col)
+            else:
+                self.board[row][col] = piece
+                self.board[old_row][old_col] = ''
+            self.promote_to_king(row, col)
+            self.selected_piece = None
+            self.current_player = 'black' if self.current_player == 'white' else 'white'
+            self.draw_board()
+
+    def is_valid_move(self, row, col):
+        # Проверка на допустимость хода
+        if not (0 <= row < self.board_size and 0 <= col < self.board_size):
+            return False
+        
+        piece = self.board[self.selected_piece[0]][self.selected_piece[1]]
+        
+        # Проверка на пустую клетку или возможность взятия
+        if self.board[row][col] != '' and self.board[row][col].startswith(self.current_player):
+            return False
+        
+        if piece.endswith('_king'):
+            # Дамка может двигаться на любое количество клеток по диагонали
+            return abs(row - self.selected_piece[0]) == abs(col - self.selected_piece[1])
+        else:
+            # Обычные шашки могут двигаться только на одну клетку по диагонали
+            return (abs(row - self.selected_piece[0]) == 1 and abs(col - self.selected_piece[1]) == 1)
+
+    def is_capture_move(self, old_row, old_col, new_row, new_col):
+        # Проверка на возможность взятия
+        if abs(new_row - old_row) == 2 and abs(new_col - old_col) == 2:
+            mid_row = (old_row + new_row) // 2
+            mid_col = (old_col + new_col) // 2
+            mid_piece = self.board[mid_row][mid_col]
+            return mid_piece and mid_piece != self.current_player and mid_piece != self.current_player + '_king'
+        return False
+
+    def capture_piece(self, old_row, old_col, new_row, new_col):
+        mid_row = (old_row + new_row) // 2
+        mid_col = (old_col + new_col) // 2
+        self.board[mid_row][mid_col] = ''  # Удаление срубленной шашки
+        self.board[new_row][new_col] = self.board[old_row][old_col]
+        self.board[old_row][old_col] = ''
+
+    def promote_to_king(self, row, col):
+        if (row == 0 and self.board[row][col] == 'white') or (row == self.board_size - 1 and self.board[row][col] == 'black'):
+            self.board[row][col] += '_king'  # Превращение в дамку
+
+    def run(self):
+        self.canvas.bind("<Button-1>", self.click_handler)
+        self.master.mainloop()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    game = CheckersGame(root)
+    game.run()
