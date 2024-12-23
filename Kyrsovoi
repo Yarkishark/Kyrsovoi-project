@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import simpledialog, messagebox
 
 class CheckersGame:
     def __init__(self, master):
@@ -9,10 +9,15 @@ class CheckersGame:
         self.cell_size = 60
         self.canvas = tk.Canvas(master, width=self.board_size * self.cell_size, height=self.board_size * self.cell_size)
         self.canvas.pack()
+        self.center_window()
         self.board = self.create_board()
         self.selected_piece = None
-        self.current_player = 'white'  # 'white' or 'black'
+        self.current_player = 'white'
         self.draw_board()
+        self.canvas.bind("<Button-1>", self.click_handler)
+
+        self.is_registered = False  # Флаг для проверки регистрации
+        self.show_registration()
 
     def create_board(self):
         board = [['' for _ in range(self.board_size)] for _ in range(self.board_size)]
@@ -33,90 +38,111 @@ class CheckersGame:
                 self.canvas.create_rectangle(col * self.cell_size, row * self.cell_size,
                                              (col + 1) * self.cell_size, (row + 1) * self.cell_size,
                                              fill=color)
-                if self.board[row][col] == 'black':
+                piece = self.board[row][col]
+                if piece:
+                    fill_color = 'black' if piece.startswith('black') else 'white'
                     self.canvas.create_oval(col * self.cell_size + 10, row * self.cell_size + 10,
                                             (col + 1) * self.cell_size - 10, (row + 1) * self.cell_size - 10,
-                                            fill='black')
-                elif self.board[row][col] == 'white':
-                    self.canvas.create_oval(col * self.cell_size + 10, row * self.cell_size + 10,
-                                            (col + 1) * self.cell_size - 10, (row + 1) * self.cell_size - 10,
-                                            fill='white')
-                elif self.board[row][col] == 'white_king':
-                    self.canvas.create_oval(col * self.cell_size + 10, row * self.cell_size + 10,
-                                            (col + 1) * self.cell_size - 10, (row + 1) * self.cell_size - 10,
-                                            fill='white', outline='gold', width=5)
-                elif self.board[row][col] == 'black_king':
-                    self.canvas.create_oval(col * self.cell_size + 10, row * self.cell_size + 10,
-                                            (col + 1) * self.cell_size - 10, (row + 1) * self.cell_size - 10,
-                                            fill='black', outline='gold', width=5)
+                                            fill=fill_color)
+
+
+    def center_window(self):
+        width = self.master.winfo_screenwidth()
+        height = self.master.winfo_screenheight()
+        x = (width // 2) - (self.board_size * self.cell_size // 2)
+        y = (height // 2) - (self.board_size * self.cell_size // 2)
+        self.master.geometry(f'{self.board_size * self.cell_size}x{self.board_size * self.cell_size}+{x}+{y}')
 
     def click_handler(self, event):
+        if not self.is_registered:  # Проверка на регистрацию
+            return
+        
         col = event.x // self.cell_size
         row = event.y // self.cell_size
+        
+        # Если выбрана шашка, пытаемся сделать ход
         if self.selected_piece:
-            self.move_piece(row, col)
+            if self.is_valid_move(row, col):
+                self.move_piece(row, col)
+            else:
+                self.selected_piece = None  # Сбрасываем выбор, если ход невалидный
+                self.select_piece(row, col)  # Проверяем возможность выбора новой шашки
         else:
-            self.select_piece(row, col)
+            self.select_piece(row, col)  # Выбор новой шашки
 
     def select_piece(self, row, col):
         piece = self.board[row][col]
-        if piece and (piece.startswith(self.current_player) or piece == self.current_player + '_king'):
+        if piece and (piece.startswith(self.current_player)):
             self.selected_piece = (row, col)
+            self.draw_board()  # Перерисовываем доску для отображения возможных ходов
 
     def move_piece(self, row, col):
-        if self.is_valid_move(row, col):
-            old_row, old_col = self.selected_piece
-            piece = self.board[old_row][old_col]
-            if self.is_capture_move(old_row, old_col, row, col):
-                self.capture_piece(old_row, old_col, row, col)
-            else:
-                self.board[row][col] = piece
-                self.board[old_row][old_col] = ''
-            self.promote_to_king(row, col)
-            self.selected_piece = None
-            self.current_player = 'black' if self.current_player == 'white' else 'white'
-            self.draw_board()
+        old_row, old_col = self.selected_piece
+        self.board[row][col] = self.board[old_row][old_col]
+        self.board[old_row][old_col] = ''
+        self.selected_piece = None
+        self.current_player = 'black' if self.current_player == 'white' else 'white'
+        self.draw_board()
 
     def is_valid_move(self, row, col):
-        # Проверка на допустимость хода
         if not (0 <= row < self.board_size and 0 <= col < self.board_size):
             return False
         
         piece = self.board[self.selected_piece[0]][self.selected_piece[1]]
-        
-        # Проверка на пустую клетку или возможность взятия
-        if self.board[row][col] != '' and self.board[row][col].startswith(self.current_player):
+
+        # Проверка на пустую клетку или возможность движения по диагонали
+        if self.board[row][col] != '':
             return False
-        
-        if piece.endswith('_king'):
-            # Дамка может двигаться на любое количество клеток по диагонали
-            return abs(row - self.selected_piece[0]) == abs(col - self.selected_piece[1])
-        else:
-            # Обычные шашки могут двигаться только на одну клетку по диагонали
-            return (abs(row - self.selected_piece[0]) == 1 and abs(col - self.selected_piece[1]) == 1)
 
-    def is_capture_move(self, old_row, old_col, new_row, new_col):
-        # Проверка на возможность взятия
-        if abs(new_row - old_row) == 2 and abs(new_col - old_col) == 2:
-            mid_row = (old_row + new_row) // 2
-            mid_col = (old_col + new_col) // 2
-            mid_piece = self.board[mid_row][mid_col]
-            return mid_piece and mid_piece != self.current_player and mid_piece != self.current_player + '_king'
-        return False
+        # Проверка на возможность прыжка
+        old_row, old_col = self.selected_piece
+        jump_row = (old_row + row) // 2
+        jump_col = (old_col + col) // 2
+        if self.board[jump_row][jump_col] != '' and self.board[jump_row][jump_col] != piece:
+            return (abs(row - old_row) == 2) and (abs(col - old_col) == 2)
 
-    def capture_piece(self, old_row, old_col, new_row, new_col):
-        mid_row = (old_row + new_row) // 2
-        mid_col = (old_col + new_col) // 2
-        self.board[mid_row][mid_col] = ''  # Удаление срубленной шашки
-        self.board[new_row][new_col] = self.board[old_row][old_col]
-        self.board[old_row][old_col] = ''
+        # Шашки могут двигаться только вперед
+        if piece.startswith('white'):
+            return (row - old_row == -1) and (abs(col - old_col) == 1)
+        elif piece.startswith('black'):
+            return (row - old_row == 1) and (abs(col - old_col) == 1)
 
-    def promote_to_king(self, row, col):
-        if (row == 0 and self.board[row][col] == 'white') or (row == self.board_size - 1 and self.board[row][col] == 'black'):
-            self.board[row][col] += '_king'  # Превращение в дамку
+    def show_registration(self):
+        registration_window = tk.Toplevel(self.master)
+        registration_window.title("Регистрация")
+        registration_window.geometry("300x180")  # Увеличиваем размер окна
+        registration_window.attributes('-topmost', True)  # Делаем окно регистрации поверх игрового поля
+
+        # Центрируем окно регистрации
+        width = 300
+        height = 180
+        x = (self.master.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.master.winfo_screenheight() // 2) - (height // 2)
+        registration_window.geometry(f"{width}x{height}+{x}+{y}")
+
+        tk.Label(registration_window, text="Введите логин:").pack(pady=5)
+        login_entry = tk.Entry(registration_window)
+        login_entry.pack(pady=5)
+
+        tk.Label(registration_window, text="Введите пароль:").pack(pady=5)
+        password_entry = tk.Entry(registration_window, show='*')
+        password_entry.pack(pady=5)
+
+        def on_register():
+            login = login_entry.get()
+            password = password_entry.get()
+            if login and password:
+                registration_window.withdraw()  # Скрываем окно регистрации
+                messagebox.showinfo("Регистрация", "Регистрация успешна!", parent=self.master)
+                self.is_registered = True  # Устанавливаем флаг регистрации
+                registration_window.destroy()
+            else:
+                messagebox.showerror("Ошибка", "Логин и пароль не могут быть пустыми.", parent=registration_window)
+
+        tk.Button(registration_window, text="Зарегистрироваться", command=on_register).pack(pady=10)
 
     def run(self):
-        self.canvas.bind("<Button-1>", self.click_handler)
+        self.draw_board()
         self.master.mainloop()
 
 if __name__ == "__main__":
